@@ -1,0 +1,22 @@
+{
+  "name": "hosting-crm",
+  "version": "1.0.0",
+  "description": "CRM de Hosting y Dominios integrado con SPanel",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test:spanel": "node scripts/test-spanel-connection.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "better-sqlite3": "^11.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "express": "^4.19.0",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "node-cron": "^3.0.3"
+  }
+}
