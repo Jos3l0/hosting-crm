@@ -5,25 +5,26 @@ Sistema de gestión de dominios, pagos y alertas integrado con SPanel.
 ## Arquitectura
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                  Cloudflare Tunnel                   │
-│  https://sistema.startmotif.net.ar                   │
-│         ↓ (túnel crm-sistema)                        │
-│  cloudflared → http://localhost:3001                 │
-└──────────────────────┬──────────────────────────────┘
-                       │
-┌──────────────────────┴──────────────────────────────┐
-│                   Node.js (Express)                  │
-│  Puerto: 3001                                        │
-│  Servidor único: frontend + API                      │
-│  /api/* → rutas del backend                          │
-│  /*     → frontend estático                          │
-└──────────────────────┬──────────────────────────────┘
-                       │
-┌──────────────────────┴──────────────────────────────┐
-│                   SQLite (better-sqlite3)            │
-│  Base de datos: backend/database/app.db              │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                    Cloudflare Zero Trust                  │
+│  https://sistema.startmotif.net.ar                        │
+│         ↓ (autenticación: email/Google/GitHub)            │
+│         ↓ (túnel crm-sistema)                             │
+│  cloudflared → http://localhost:3001                      │
+└─────────────────────────┬────────────────────────────────┘
+                          │
+┌─────────────────────────┴────────────────────────────────┐
+│                   Node.js (Express)                       │
+│  Puerto: 3001                                             │
+│  Servidor único: frontend + API                           │
+│  /api/* → rutas del backend                               │
+│  /*     → frontend estático                               │
+└─────────────────────────┬────────────────────────────────┘
+                          │
+┌─────────────────────────┴────────────────────────────────┐
+│                   SQLite (better-sqlite3)                 │
+│  Base de datos: backend/database/app.db                   │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ## Estructura del proyecto
@@ -69,14 +70,14 @@ hosting-crm/
 - Node.js 20+
 - npm
 - SQLite (better-sqlite3)
-- Cuenta Cloudflare (para el túnel)
+- Cuenta Cloudflare (para túnel y Zero Trust)
 
 ## Instalación
 
 ### 1. Clonar repositorio
 
 ```bash
-git clone <url-del-repo> /home/www/html/hosting-crm
+git clone https://github.com/Jos3l0/hosting-crm /home/www/html/hosting-crm
 cd /home/www/html/hosting-crm/backend
 ```
 
@@ -89,7 +90,12 @@ npm install
 
 ### 3. Configurar variables de entorno
 
-Crear `backend/.env`:
+```bash
+cp .env.example .env
+nano .env
+```
+
+Contenido de `.env`:
 
 ```env
 NODE_ENV=production
@@ -105,18 +111,81 @@ CRM_SESSION_SECRET=generar_un_secreto_aleatorio
 CRM_ADMIN_EMAIL=admin@ejemplo.com
 ```
 
-### 4. Iniciar servidor
+## Auto-inicio con systemd (persiste al reiniciar)
 
-```bash
-cd /home/www/html/hosting-crm/backend
-nohup node server.js > /tmp/crm-server.log 2>&1 &
+El servidor y el túnel se inician automáticamente al encender el equipo gracias a servicios systemd.
+
+### Servicio: CRM Hosting (Node.js)
+
+Archivo: `/etc/systemd/system/crm-hosting.service`
+
+```systemd
+[Unit]
+Description=CRM Hosting - Node.js Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/www/html/hosting-crm/backend
+ExecStart=/usr/bin/node /home/www/html/hosting-crm/backend/server.js
+Restart=always
+RestartSec=5
+StandardOutput=append:/tmp/crm-server.log
+StandardError=append:/tmp/crm-server.log
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-### 5. Verificar
+### Servicio: Cloudflare Tunnel
+
+Archivo: `/etc/systemd/system/cloudflared-tunnel.service`
+
+```systemd
+[Unit]
+Description=Cloudflare Tunnel - CRM Hosting
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jose
+ExecStart=/usr/local/bin/cloudflared tunnel --config /home/jose/.cloudflared/crm-sistema.yml run
+Restart=always
+RestartSec=5
+StartLimitInterval=0
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Activar servicios
 
 ```bash
-curl http://localhost:3001/api/domains/dashboard
-curl http://localhost:3001/
+sudo systemctl daemon-reload
+sudo systemctl enable crm-hosting.service
+sudo systemctl enable cloudflared-tunnel.service
+sudo systemctl start crm-hosting.service
+sudo systemctl start cloudflared-tunnel.service
+```
+
+### Ver estado
+
+```bash
+sudo systemctl status crm-hosting.service
+sudo systemctl status cloudflared-tunnel.service
+```
+
+### Ver logs
+
+```bash
+# Logs del servidor Node.js
+tail -f /tmp/crm-server.log
+
+# Logs del túnel
+sudo journalctl -u cloudflared-tunnel.service -f
 ```
 
 ## Túnel Cloudflare
@@ -124,7 +193,7 @@ curl http://localhost:3001/
 ### Requisitos
 
 - cloudflared instalado
-- Dominio en Cloudflare con proxy naranja (proxied)
+- Dominio en Cloudflare (proxied)
 
 ### Creación del túnel
 
@@ -134,6 +203,9 @@ cloudflared tunnel login
 
 # Crear túnel
 cloudflared tunnel create crm-sistema
+
+# Ver ID del túnel
+cloudflared tunnel list
 
 # Crear configuración
 cat > ~/.cloudflared/crm-sistema.yml << EOF
@@ -145,20 +217,6 @@ ingress:
     service: http://localhost:3001
   - service: http_status:404
 EOF
-
-# Enrutar DNS (desde Cloudflare dashboard)
-# Agregar registro CNAME:
-#   sistema.startmotif.net.ar → <ID>.cfargotunnel.com
-#   Proxy: naranja (proxied)
-
-# Ejecutar túnel
-cloudflared tunnel --config ~/.cloudflared/crm-sistema.yml run
-```
-
-### Ejecución persistente con screen
-
-```bash
-screen -dmS crm-tunnel cloudflared tunnel --config /home/jose/.cloudflared/crm-sistema.yml run
 ```
 
 ### DNS en Cloudflare
@@ -168,6 +226,67 @@ Agregar manualmente en el panel de Cloudflare:
 | Tipo  | Nombre     | Valor                                        | Proxy |
 |-------|------------|----------------------------------------------|-------|
 | CNAME | sistema    | `<ID-del-túnel>.cfargotunnel.com`            | ☑️    |
+
+### Iniciar manualmente (sin systemd)
+
+```bash
+cloudflared tunnel --config /home/jose/.cloudflared/crm-sistema.yml run
+```
+
+## Seguridad: Cloudflare Zero Trust (Access)
+
+Cloudflare Access protege el sitio con autenticación antes de llegar al servidor.
+
+### Cómo funciona
+
+```
+Usuario → https://sistema.startmotif.net.ar
+                    ↓
+          Cloudflare intercepta
+                    ↓
+        🔐 PANTALLA DE LOGIN (código por email)
+                    ↓
+          Autenticación exitosa
+                    ↓
+          Cookie JWT válida por 24h
+                    ↓
+          → Túnel → http://localhost:3001
+```
+
+### Configuración (desde dashboard de Cloudflare)
+
+1. Ir a [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Zero Trust** (escudo)
+2. **Access** → **Applications** → **Add an application**
+3. Tipo: **Self-hosted**
+4. Configurar:
+
+   | Campo | Valor |
+   |-------|-------|
+   | Application name | `CRM Hosting` |
+   | Domain | `sistema.startmotif.net.ar` |
+   | Session Duration | `24h` |
+
+5. En **Policies**, agregar regla de acceso:
+
+   | Selector | Value |
+   |----------|-------|
+   | `Emails` | `olivajose@gmail.com` |
+
+6. **Identity Provider**: Cloudflare (código por email) o Google/GitHub
+7. Guardar
+
+### Agregar más usuarios
+
+En la policy existente, agregar más emails o usar dominios completos:
+
+| Selector | Value |
+|----------|-------|
+| `Emails` | `persona@ejemplo.com` |
+| `Emails` | `*@midominio.com` (todo el dominio) |
+
+### Límite gratuito
+
+Cloudflare Zero Trust free permite hasta **50 usuarios**.
 
 ## API Endpoints
 
@@ -227,7 +346,7 @@ La sincronización:
 1. Obtiene todas las cuentas de SPanel
 2. Extrae el dominio principal de cada cuenta
 3. Inserta o actualiza en la base de datos local
-4. No sobrescribe datos manuales del CRM (cliente, email, teléfono, etc.)
+4. **No sobrescribe** datos manuales del CRM (cliente, email, teléfono, etc.)
 
 La sincronización automática se ejecuta diariamente a las 3:00 AM.
 
@@ -250,20 +369,32 @@ tail -f /tmp/crm-server.log
 ### Ver logs del túnel
 
 ```bash
-screen -r crm-tunnel
-# Ctrl+A, D para desconectar sin detener
+sudo journalctl -u cloudflared-tunnel.service -f
 ```
 
 ### Reiniciar servidor
 
 ```bash
-kill $(lsof -t -i:3001) 2>/dev/null
-cd /home/www/html/hosting-crm/backend && nohup node server.js > /tmp/crm-server.log 2>&1 &
+sudo systemctl restart crm-hosting.service
+```
+
+### Reiniciar túnel
+
+```bash
+sudo systemctl restart cloudflared-tunnel.service
+```
+
+### Detener todo
+
+```bash
+sudo systemctl stop crm-hosting.service cloudflared-tunnel.service
 ```
 
 ## Notas
 
 - El frontend y backend corren en el **mismo servidor Node.js** (puerto 3001)
 - El túnel Cloudflare expone solo `sistema.startmotif.net.ar`
-- No usar `pm2` en este servidor; iniciar con `nohup`
+- Cloudflare Zero Trust protege el acceso con autenticación por email
+- Los servicios se inician automáticamente al encender el equipo (systemd)
 - Los datos del cliente (nombre, email, teléfono, WhatsApp) son **manuales** y no se sobrescriben al sincronizar
+- SPanel API solo soporta `accounts/listaccounts` en este servidor
