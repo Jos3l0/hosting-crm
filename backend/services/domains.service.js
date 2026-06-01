@@ -162,6 +162,8 @@ export function getDashboardStats() {
 
 export function deleteDomain(id) {
   const db = getDb();
+  db.prepare("DELETE FROM payments WHERE domain_id = ?").run(id);
+  db.prepare("DELETE FROM alerts WHERE domain_id = ?").run(id);
   const existing = db.prepare('SELECT * FROM domains WHERE id = ?').get(id);
   if (!existing) {
     throw new Error('Dominio no encontrado');
