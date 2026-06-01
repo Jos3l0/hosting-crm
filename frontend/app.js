@@ -67,6 +67,7 @@ async function loadDashboard() {
   document.getElementById('statPaid').textContent = d.paid;
   document.getElementById('statPending').textContent = d.pending;
   document.getElementById('statDue').textContent = `$${Number(d.totalDue).toFixed(2)}`;
+  document.getElementById('statPaidTotal').textContent = `$${Number(d.totalPaid).toFixed(2)}`;
   document.getElementById('statAlerts').textContent = d.criticalAlerts;
 }
 
@@ -191,12 +192,30 @@ function renderDomains() {
       <td>${getStatusBadge(d.is_active)}</td>
       <td>${getAlertSummary(d)}</td>
       <td>
-        <button class="btn btn-sm btn-outline" onclick="openEditModal(${d.id}, 'profile')">✏️</button>
-        <button class="btn btn-sm btn-outline" onclick="openEditModal(${d.id}, 'payment')">💰</button>
-        <button class="btn btn-sm btn-outline" onclick="sendWhatsApp(${d.id})">📱</button>
+        <button class="btn btn-sm btn-outline" onclick="openEditModal(${d.id}, 'profile')" title="Editar">✏️</button>
+        <button class="btn btn-sm btn-outline" onclick="openEditModal(${d.id}, 'payment')" title="Pago">💰</button>
+        <button class="btn btn-sm btn-outline" onclick="sendWhatsApp(${d.id})" title="WhatsApp">📱</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDeleteDomain(${d.id}, '${d.domain}')" title="Eliminar">🗑️</button>
       </td>
     </tr>`;
   }).join('');
+}
+
+function confirmDeleteDomain(id, domain) {
+  if (confirm(`¿Estás seguro de eliminar el dominio "${domain}"?\nEsta acción no se puede deshacer.`)) {
+    deleteDomain(id);
+  }
+}
+
+async function deleteDomain(id) {
+  const res = await api(`/api/domains/${id}`, { method: 'DELETE' });
+  if (res.ok) {
+    showToast('Dominio eliminado', 'success');
+    await loadDomains();
+    await loadDashboard();
+  } else {
+    showToast('Error al eliminar: ' + (res.message || 'desconocido'), 'error');
+  }
 }
 
 async function openEditModal(id, tab = 'profile') {

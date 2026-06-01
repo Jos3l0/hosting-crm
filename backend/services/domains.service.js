@@ -139,6 +139,11 @@ export function getDashboardStats() {
     WHERE payment_status IN ('pending', 'overdue')
   `).get();
 
+  const totalPaid = db.prepare(`
+    SELECT COALESCE(SUM(amount_due), 0) as total FROM domains
+    WHERE payment_status = 'paid'
+  `).get();
+
   const criticalAlerts = db.prepare("SELECT COUNT(*) as count FROM alerts WHERE status = 'pending' AND severity IN ('critica', 'urgente')").get();
 
   return {
@@ -150,8 +155,19 @@ export function getDashboardStats() {
     pending: pending.count,
     overdue: overdue.count,
     totalDue: totalDue.total,
+    totalPaid: totalPaid.total,
     criticalAlerts: criticalAlerts.count
   };
+}
+
+export function deleteDomain(id) {
+  const db = getDb();
+  const existing = db.prepare('SELECT * FROM domains WHERE id = ?').get(id);
+  if (!existing) {
+    throw new Error('Dominio no encontrado');
+  }
+  db.prepare('DELETE FROM domains WHERE id = ?').run(id);
+  return { deleted: true };
 }
 
 export function createManualDomain(domain, clientName) {

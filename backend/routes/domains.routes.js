@@ -1,8 +1,8 @@
 import express from 'express';
-import { createManualDomain, 
-  getAllDomains, getDomainById, updateDomainProfile,
+import { 
+  createManualDomain, getAllDomains, getDomainById, updateDomainProfile,
   updateDomainExpiration, updateDomainPayment, updateDomainAlerts,
-  getDashboardStats
+  getDashboardStats, deleteDomain
 } from '../services/domains.service.js';
 
 const router = express.Router();
@@ -32,6 +32,17 @@ router.get('/:id', (req, res) => {
     res.json({ ok: true, data: domain });
   } catch (error) {
     res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+router.post('/', (req, res) => {
+  try {
+    const { domain, client_name } = req.body;
+    if (!domain) return res.status(400).json({ ok: false, message: 'El dominio es requerido' });
+    const result = createManualDomain(domain, client_name);
+    res.status(201).json({ ok: true, ...result });
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message });
   }
 });
 
@@ -74,15 +85,13 @@ router.put('/:id/alerts', (req, res) => {
   }
 });
 
-export default router;
-
-router.post('/', (req, res) => {
+router.delete('/:id', (req, res) => {
   try {
-    const { domain, client_name } = req.body;
-    if (!domain) return res.status(400).json({ ok: false, message: 'El dominio es requerido' });
-    const result = createManualDomain(domain, client_name);
-    res.status(201).json({ ok: true, ...result });
+    const result = deleteDomain(req.params.id);
+    res.json({ ok: true, ...result });
   } catch (error) {
-    res.status(400).json({ ok: false, message: error.message });
+    res.status(404).json({ ok: false, message: error.message });
   }
 });
+
+export default router;

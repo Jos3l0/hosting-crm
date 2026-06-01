@@ -94,6 +94,8 @@ header .subtitle { font-size: 0.85rem; opacity: 0.85; }
 .btn-danger:hover { background: #b91c1c; }
 .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
 .btn-outline:hover { background: var(--bg); }
+.btn-danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+.btn-danger:hover { background: #fef2f2; }
 .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
 
 .search-input {
