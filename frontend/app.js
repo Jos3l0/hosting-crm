@@ -10,6 +10,15 @@ async function api(url, options = {}) {
   return res.json();
 }
 
+function formatMoney(amount, currency = 'ARS') {
+  if (amount === null || amount === undefined) return '-';
+  return Number(amount).toLocaleString('es-AR', {
+    style: 'currency',
+    currency: currency,
+    minimumFractionDigits: 2
+  });
+}
+
 function showToast(message, type = 'info') {
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
@@ -66,8 +75,8 @@ async function loadDashboard() {
   document.getElementById('statExpired').textContent = d.expired;
   document.getElementById('statPaid').textContent = d.paid;
   document.getElementById('statPending').textContent = d.pending;
-  document.getElementById('statDue').textContent = `$${Number(d.totalDue).toFixed(2)}`;
-  document.getElementById('statPaidTotal').textContent = `$${Number(d.totalPaid).toFixed(2)}`;
+  document.getElementById('statDue').textContent = formatMoney(d.totalDue);
+  document.getElementById('statPaidTotal').textContent = formatMoney(d.totalPaid);
   document.getElementById('statAlerts').textContent = d.criticalAlerts;
 }
 
@@ -462,7 +471,7 @@ async function loadPayments() {
     `<tr>
       <td>${p.domain || '-'}</td>
       <td>${p.client_name || '-'}</td>
-      <td>$${Number(p.amount).toFixed(2)} ${p.currency || 'USD'}</td>
+      <td>${formatMoney(p.amount, p.currency || 'ARS')}</td>
       <td>${p.method || '-'}</td>
       <td>${p.paid_at || '-'}</td>
       <td>${p.reference || '-'}</td>
